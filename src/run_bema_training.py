@@ -205,7 +205,7 @@ def get_sft_args(cfg):  # Hydra args -> HuggingFace Trainer args
 
 
 
-@hydra.main(config_path='../configs/', config_name='master', version_base=None)
+@hydra.main(config_path='../hydra_configs/', config_name='master', version_base=None)
 def main(cfg):
 
     torch.manual_seed(cfg.seed)
@@ -226,8 +226,8 @@ def main(cfg):
     cfg.meta.local_rank = int(os.environ.get('LOCAL_RANK', 0))
     
     load_wandb_key(cfg)
-    if (cfg.ou_ema.ema_update_after_lag is not None) and (cfg.ou_ema.ema_update_after_lag > 0):
-        cfg.ou_ema.ema_update_after = cfg.ou_ema.update_after + cfg.ou_ema.ema_update_after_lag
+    if (cfg.stabilizer.ema_update_after_lag is not None) and (cfg.stabilizer.ema_update_after_lag > 0):
+        cfg.stabilizer.ema_update_after = cfg.stabilizer.update_after + cfg.stabilizer.ema_update_after_lag
     
     if cfg.meta.local_rank == 0:
         print('Config:', cfg)   
@@ -298,12 +298,12 @@ def main(cfg):
 
 
     bema_cb = BEMACallback(
-        update_freq=cfg.ou_ema.update_freq,
-        ema_power=cfg.ou_ema.ema_power,
-        eta_power=cfg.ou_ema.eta_power,
-        update_after=cfg.ou_ema.ema_update_after,
-        scaling_lag=cfg.ou_ema.scaling_lag,
-        ema_gamma=cfg.ou_ema.ema_gamma,
+        update_freq=cfg.stabilizer.update_freq,
+        ema_power=cfg.stabilizer.ema_power,
+        eta_power=cfg.stabilizer.eta_power,
+        update_after=cfg.stabilizer.ema_update_after,
+        scaling_lag=cfg.stabilizer.scaling_lag,
+        ema_gamma=cfg.stabilizer.ema_gamma,
         min_ema_multiplier=cfg.training.min_lr_multiplier,
         device='cpu'
     )

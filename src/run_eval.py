@@ -252,7 +252,7 @@ def do_model_eval(cfg, model, dataloaders, evaluators, aliases, tokenizer, outpu
 
 
 @torch.no_grad()
-@hydra.main(config_path='../configs/', config_name='master', version_base=None)
+@hydra.main(config_path='../hydra_configs/', config_name='master', version_base=None)
 def main(cfg):
 
     
