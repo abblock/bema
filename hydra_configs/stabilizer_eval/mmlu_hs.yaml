@@ -1,0 +1,244 @@
+use_vllm:  True 
+gpu_memory_utilization: ${vllm_inits.gpu_memory_utilization}
+max_model_len: ${vllm_inits.max_model_len}
+ckpts_directory: train
+
+
+do_task:  True 
+num_examples: 64
+selection_seed: 37371
+use_cot: False
+save_gens: False
+
+max_new_tokens: 256
+do_sample: True
+num_return_sequences: 50 
+temperature: 1.0
+seed: 13337
+
+
+
+
+loss_eval:
+  do_loss_eval: False
+  do_train_loss_eval: False
+  do_test_loss_eval: False
+  eval_batch_size: 24
+  eval_num_workers: 4
+  max_eval_samples: 1000
+  eval_truncation_level: 1024
+
+generations_eval:
+    do_generations: True
+    hf_batch_size: null
+    num_shots: 0
+    use_score_mode: False
+    tasks:    
+        - alias: MMLU-high_school_biology
+          do_task: ${stabilizer_eval.do_task}
+          num_examples: ${stabilizer_eval.num_examples}
+          selection_seed: ${stabilizer_eval.selection_seed}
+          use_cot: ${stabilizer_eval.use_cot}
+          save_gens: ${stabilizer_eval.save_gens}
+          num_shots: ${stabilizer_eval.generations_eval.num_shots}
+          generation_kwargs:
+            max_new_tokens: ${stabilizer_eval.max_new_tokens}
+            do_sample: ${stabilizer_eval.do_sample}
+            num_return_sequences: ${stabilizer_eval.num_return_sequences} 
+            temperature: ${stabilizer_eval.temperature}
+            seed: ${stabilizer_eval.seed}
+
+
+        - alias: MMLU-high_school_chemistry
+          do_task: ${stabilizer_eval.do_task} 
+          num_examples: ${stabilizer_eval.num_examples}
+          selection_seed: ${stabilizer_eval.selection_seed}
+          use_cot: ${stabilizer_eval.use_cot}
+          save_gens: ${stabilizer_eval.save_gens}
+          num_shots: ${stabilizer_eval.generations_eval.num_shots}
+          generation_kwargs:
+            max_new_tokens: ${stabilizer_eval.max_new_tokens}
+            do_sample: ${stabilizer_eval.do_sample}
+            num_return_sequences: ${stabilizer_eval.num_return_sequences}
+            temperature: ${stabilizer_eval.temperature}
+            seed: ${stabilizer_eval.seed}
+
+
+        - alias: MMLU-high_school_computer_science
+          do_task: ${stabilizer_eval.do_task} 
+          num_examples: ${stabilizer_eval.num_examples}
+          selection_seed: ${stabilizer_eval.selection_seed}
+          use_cot: ${stabilizer_eval.use_cot}
+          save_gens: ${stabilizer_eval.save_gens}
+          num_shots: ${stabilizer_eval.generations_eval.num_shots}
+          generation_kwargs:
+            max_new_tokens: ${stabilizer_eval.max_new_tokens}
+            do_sample: ${stabilizer_eval.do_sample}
+            num_return_sequences: ${stabilizer_eval.num_return_sequences}
+            temperature: ${stabilizer_eval.temperature}
+            seed: ${stabilizer_eval.seed}
+
+
+        - alias: MMLU-high_school_european_history
+          do_task: ${stabilizer_eval.do_task}
+          num_examples: ${stabilizer_eval.num_examples}
+          selection_seed: ${stabilizer_eval.selection_seed}
+          use_cot: ${stabilizer_eval.use_cot}
+          save_gens: ${stabilizer_eval.save_gens}
+          num_shots: ${stabilizer_eval.generations_eval.num_shots}
+          generation_kwargs:
+            max_new_tokens: ${stabilizer_eval.max_new_tokens}
+            do_sample: ${stabilizer_eval.do_sample}
+            num_return_sequences: ${stabilizer_eval.num_return_sequences}
+            temperature: ${stabilizer_eval.temperature}
+            seed: ${stabilizer_eval.seed}
+
+
+        - alias: MMLU-high_school_geography
+          do_task: ${stabilizer_eval.do_task}
+          num_examples: ${stabilizer_eval.num_examples}
+          selection_seed: ${stabilizer_eval.selection_seed}
+          use_cot: ${stabilizer_eval.use_cot}
+          save_gens: ${stabilizer_eval.save_gens}
+          num_shots: ${stabilizer_eval.generations_eval.num_shots}
+          generation_kwargs:
+            max_new_tokens: ${stabilizer_eval.max_new_tokens}
+            do_sample: ${stabilizer_eval.do_sample}
+            num_return_sequences: ${stabilizer_eval.num_return_sequences}
+            temperature: ${stabilizer_eval.temperature}
+            seed: ${stabilizer_eval.seed}
+
+
+        - alias: MMLU-high_school_government_and_politics
+          do_task: ${stabilizer_eval.do_task}
+          num_examples: ${stabilizer_eval.num_examples}
+          selection_seed: ${stabilizer_eval.selection_seed}
+          use_cot: ${stabilizer_eval.use_cot}
+          save_gens: ${stabilizer_eval.save_gens}
+          num_shots: ${stabilizer_eval.generations_eval.num_shots}
+          generation_kwargs:
+            max_new_tokens: ${stabilizer_eval.max_new_tokens}
+            do_sample: ${stabilizer_eval.do_sample}
+            num_return_sequences: ${stabilizer_eval.num_return_sequences}
+            temperature: ${stabilizer_eval.temperature}
+            seed: ${stabilizer_eval.seed}
+
+
+        - alias: MMLU-high_school_macroeconomics
+          do_task: ${stabilizer_eval.do_task}
+          num_examples: ${stabilizer_eval.num_examples}
+          selection_seed: ${stabilizer_eval.selection_seed}
+          use_cot: ${stabilizer_eval.use_cot}
+          save_gens: ${stabilizer_eval.save_gens}
+          num_shots: ${stabilizer_eval.generations_eval.num_shots}
+          generation_kwargs:
+            max_new_tokens: ${stabilizer_eval.max_new_tokens}
+            do_sample: ${stabilizer_eval.do_sample}
+            num_return_sequences: ${stabilizer_eval.num_return_sequences}
+            temperature: ${stabilizer_eval.temperature}
+            seed: ${stabilizer_eval.seed}
+
+
+        - alias: MMLU-high_school_mathematics
+          do_task: ${stabilizer_eval.do_task}
+          num_examples: ${stabilizer_eval.num_examples}
+          selection_seed: ${stabilizer_eval.selection_seed}
+          use_cot: ${stabilizer_eval.use_cot}
+          save_gens: ${stabilizer_eval.save_gens}
+          num_shots: ${stabilizer_eval.generations_eval.num_shots}
+          generation_kwargs:
+            max_new_tokens: ${stabilizer_eval.max_new_tokens}
+            do_sample: ${stabilizer_eval.do_sample}
+            num_return_sequences: ${stabilizer_eval.num_return_sequences}
+            temperature: ${stabilizer_eval.temperature}
+            seed: ${stabilizer_eval.seed}
+
+
+        - alias: MMLU-high_school_microeconomics
+          do_task: ${stabilizer_eval.do_task}
+          num_examples: ${stabilizer_eval.num_examples}
+          selection_seed: ${stabilizer_eval.selection_seed}
+          use_cot: ${stabilizer_eval.use_cot}
+          save_gens: ${stabilizer_eval.save_gens}
+          num_shots: ${stabilizer_eval.generations_eval.num_shots}
+          generation_kwargs:
+            max_new_tokens: ${stabilizer_eval.max_new_tokens}
+            do_sample: ${stabilizer_eval.do_sample}
+            num_return_sequences: ${stabilizer_eval.num_return_sequences}
+            temperature: ${stabilizer_eval.temperature}
+            seed: ${stabilizer_eval.seed}
+
+
+        - alias: MMLU-high_school_physics
+          do_task: ${stabilizer_eval.do_task} 
+          num_examples: ${stabilizer_eval.num_examples}
+          selection_seed: ${stabilizer_eval.selection_seed}
+          use_cot: ${stabilizer_eval.use_cot}
+          save_gens: ${stabilizer_eval.save_gens}
+          num_shots: ${stabilizer_eval.generations_eval.num_shots}
+          generation_kwargs:
+            max_new_tokens: ${stabilizer_eval.max_new_tokens}
+            do_sample: ${stabilizer_eval.do_sample}
+            num_return_sequences: ${stabilizer_eval.num_return_sequences}
+            temperature: ${stabilizer_eval.temperature}
+            seed: ${stabilizer_eval.seed}
+
+
+        - alias: MMLU-high_school_psychology
+          do_task: ${stabilizer_eval.do_task}
+          num_examples: ${stabilizer_eval.num_examples}
+          selection_seed: ${stabilizer_eval.selection_seed}
+          use_cot: ${stabilizer_eval.use_cot}
+          save_gens: ${stabilizer_eval.save_gens}
+          num_shots: ${stabilizer_eval.generations_eval.num_shots}
+          generation_kwargs:
+            max_new_tokens: ${stabilizer_eval.max_new_tokens}
+            do_sample: ${stabilizer_eval.do_sample}
+            num_return_sequences: ${stabilizer_eval.num_return_sequences}
+            temperature: ${stabilizer_eval.temperature}
+            seed: ${stabilizer_eval.seed}
+
+
+        - alias: MMLU-high_school_statistics
+          do_task: ${stabilizer_eval.do_task}
+          num_examples: ${stabilizer_eval.num_examples}
+          selection_seed: ${stabilizer_eval.selection_seed}
+          use_cot: ${stabilizer_eval.use_cot}
+          save_gens: ${stabilizer_eval.save_gens}
+          num_shots: ${stabilizer_eval.generations_eval.num_shots}
+          generation_kwargs:
+            max_new_tokens: ${stabilizer_eval.max_new_tokens}
+            do_sample: ${stabilizer_eval.do_sample}
+            num_return_sequences: ${stabilizer_eval.num_return_sequences}
+            temperature: ${stabilizer_eval.temperature}
+            seed: ${stabilizer_eval.seed}
+
+
+        - alias: MMLU-high_school_us_history
+          do_task: ${stabilizer_eval.do_task} 
+          num_examples: ${stabilizer_eval.num_examples}
+          selection_seed: ${stabilizer_eval.selection_seed}
+          use_cot: ${stabilizer_eval.use_cot}
+          save_gens: ${stabilizer_eval.save_gens}
+          num_shots: ${stabilizer_eval.generations_eval.num_shots}
+          generation_kwargs:
+            max_new_tokens: ${stabilizer_eval.max_new_tokens}
+            do_sample: ${stabilizer_eval.do_sample}
+            num_return_sequences: ${stabilizer_eval.num_return_sequences}
+            temperature: ${stabilizer_eval.temperature}
+            seed: ${stabilizer_eval.seed}
+
+
+        - alias: MMLU-high_school_world_history
+          do_task: ${stabilizer_eval.do_task}
+          num_examples: ${stabilizer_eval.num_examples}
+          selection_seed: ${stabilizer_eval.selection_seed}
+          use_cot: ${stabilizer_eval.use_cot}
+          save_gens: ${stabilizer_eval.save_gens}
+          num_shots: ${stabilizer_eval.generations_eval.num_shots}
+          generation_kwargs:
+            max_new_tokens: ${stabilizer_eval.max_new_tokens}
+            do_sample: ${stabilizer_eval.do_sample}
+            num_return_sequences: ${stabilizer_eval.num_return_sequences}
+            temperature: ${stabilizer_eval.temperature}
+            seed: ${stabilizer_eval.seed}

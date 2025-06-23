@@ -1,0 +1,36 @@
+use_vllm:  True # False # 
+gpu_memory_utilization: ${vllm_inits.gpu_memory_utilization}
+max_model_len: ${vllm_inits.max_model_len}
+
+ckpts_directory: train
+
+loss_eval:
+    do_loss_eval: False 
+    do_train_loss_eval: False
+    do_test_loss_eval: False
+    eval_batch_size: 24
+    eval_num_workers: 4
+    max_eval_samples: 1000
+    eval_truncation_level: 1024
+
+generations_eval:
+      do_generations: True
+      save_gens: False
+      hf_batch_size: 8
+      use_cot: False
+      num_shots: 0
+      use_score_mode: False
+      tasks:
+        - alias: BoolQ
+          do_task:  True 
+          num_examples: 64
+          selection_seed: 37371
+          use_cot: ${stabilizer_eval.generations_eval.use_cot}
+          save_gens: ${stabilizer_eval.generations_eval.save_gens}
+          num_shots: ${stabilizer_eval.generations_eval.num_shots}
+          generation_kwargs:
+            max_new_tokens: 256
+            do_sample: True
+            num_return_sequences: 50 # 100
+            temperature: 1.0
+            seed: 13337

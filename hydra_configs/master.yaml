@@ -1,0 +1,91 @@
+defaults:
+  - _self_
+  - stabilizer: bema
+  - stabilizer_eval: boolq
+
+
+
+
+
+seed: 1337
+device: cuda
+
+
+
+master_parent: .
+input_parent: .
+
+
+
+
+training:
+  num_epochs: 2
+  num_steps: null
+  batch_size: 2
+  gradient_accumulation_steps: 128
+  num_workers: 4
+  fp16: True
+  bf16: False
+  lr: 3e-5
+  lr_scheduler_type: linear
+  warmup_steps: 0
+  min_lr_multiplier: 1.0
+  use_bema: True
+
+logging:
+  eval_interval: 100
+  checkpoint_interval: 100
+  log_interval: 1
+  eval_init: True
+  checkpoint_init: True
+  eval_final: True
+  checkpoint_final: True
+  output_dir: train
+
+data:
+  download: True
+  hf_repo: abblock
+  name: ${data.hf_repo}/tulu-3-sft-mixture-split-seed-1337-filtered
+  split: train
+  train_test_split: null
+  truncate_train: null
+  truncate_eval: 200
+  messages_column_name: messages
+  apply_chat_template: True
+  max_len_truncation: 4096
+
+
+model:
+  name: Qwen/Qwen2.5-1.5B
+  dtype: auto # bfloat16 for Gemma
+  num_tokens: null
+  use_flash_attn: False
+  tp_plan: null
+  device_map: null 
+
+
+
+tokenizer:
+  name: ${model.name}
+  eos_token: null
+  pad_token: null
+
+
+
+wandb:
+  use: True
+  key: null
+  host: https://microsoft-research.wandb.io
+  project: ou-ema
+  group: ${model.name}-${training.warmup_steps}-${training.min_lr_multiplier} 
+  name: seed-${seed}
+  entity: null
+
+vllm_inits:
+  gpu_memory_utilization: 0.7
+  max_model_len: 2048
+
+
+
+fs:
+  blob_root: /mnt/default

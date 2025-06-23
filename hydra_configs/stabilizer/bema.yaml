@@ -1,0 +1,22 @@
+stabilizer: bema
+
+
+do_stabilizing: True
+
+train_exp_id: null
+
+update_freq: 400
+
+
+eta_power: 0.2
+ema_power: 0.5
+update_after: 0
+ema_gamma: 1.0
+scaling_lag: 10
+ema_update_after: null
+ema_update_after_lag: null
+min_ema_multiplier: 1e-4
+
+
+min_ckpt: null
+max_ckpt: null
