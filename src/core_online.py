@@ -166,10 +166,7 @@ class BEMACallback(TrainerCallback):
     @torch.no_grad()
     def on_train_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         if state.is_world_process_zero:
-            # assemble a final state_dict from the EMA+OU buffers
-            final_sd = {}
-            for name, buf in zip(self.param_names, self.ema_bufs):
-                final_sd[name] = buf.clone()
+            final_state_dict = self.running_model.state_dict()
             path = f"{args.output_dir}/bema.pt"
-            torch.save(final_sd, path)
+            torch.save(final_state_dict, path)
             print(f"Saved BEMA to {path}")

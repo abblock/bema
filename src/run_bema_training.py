@@ -311,18 +311,27 @@ def main(cfg):
     if not cfg.training.use_bema:
         print("Warning: BEMA is disabled. Set `use_bema: True` in the config to enable BEMA.")
         bema_cb = None
-
-
-    trainer = BEMASFTTrainer(
+        trainer = BEMASFTTrainer(
         cfg,
         model=model,
         args=trainer_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         processing_class=tokenizer,
-        callbacks=[bema_cb],
         bema_cb=bema_cb
-    )
+        )
+    else:
+        print("BEMA is enabled. Initializing BEMASFTTrainer with BEMACallback.")
+        trainer = BEMASFTTrainer(
+            cfg,
+            model=model,
+            args=trainer_args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            processing_class=tokenizer,
+            callbacks=[bema_cb],
+            bema_cb=bema_cb
+        )
 
 
     trainer.train()
@@ -338,7 +347,7 @@ def main(cfg):
         'cfg': OmegaConf.to_container(cfg),
         }
         ## Preparing Saving
-        outputs_dir = os.path.join(cfg.master_parent, 'train_from_teleport')
+        outputs_dir = os.path.join(cfg.master_parent, 'train')
         os.makedirs(outputs_dir, exist_ok=True)
         with open(os.path.join(outputs_dir, 'results.pkl'), 'wb') as f:
             pickle.dump(outputs, f)

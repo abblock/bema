@@ -199,7 +199,7 @@ def make_updateable_vllm(path,rank=0, world_size=1, gpu_memory_utilization=0.9, 
     """
     Creates a vLLM model from a path.  The model is updateable in that we can update the weights with new weights
     """
-    llm = LLM(path, worker_extension_cls='eval_generations_utils.WorkerExtensionSingleGPU', gpu_memory_utilization=gpu_memory_utilization, **kwargs)
+    llm = LLM(path, worker_extension_cls='eval_utils.WorkerExtensionSingleGPU', gpu_memory_utilization=gpu_memory_utilization, **kwargs)
 
     return llm
 

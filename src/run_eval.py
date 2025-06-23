@@ -176,20 +176,20 @@ def get_generation_evaluators(cfg, tokenizer):
         if task.alias == 'GSM8K' and task.do_task:
             from eval_utils import GSM8KEvaluator
             sampling_arg = get_sampling_params(task.generation_kwargs, use_vllm=cfg.stabilizer_eval.use_vllm)
-            evaluator = GSM8KEvaluator(tokenizer, task.num_examples, sampling_arg, use_vllm=cfg.stabilizer_eval.use_vllm, selection_seed=task.selection_seed, hf_batch_size=cfg.stabilizer_eval.generations_eval.hf_batch_size, save_gens=task.save_gens, num_shots=task.num_shots)
+            evaluator = GSM8KEvaluator(tokenizer, task.num_examples, sampling_arg, use_vllm=cfg.stabilizer_eval.use_vllm, selection_seed=task.selection_seed, save_gens=task.save_gens, num_shots=task.num_shots)
             evaluators.append(evaluator)
             aliases.append(evaluator.alias)
         elif 'MMLU' in task.alias and task.do_task:
             from eval_utils import MMLUEvaluator
             subset = task.alias.split('-')[1]
             sampling_arg = get_sampling_params(task.generation_kwargs, use_vllm=cfg.stabilizer_eval.use_vllm)
-            evaluator = MMLUEvaluator(subset, tokenizer, task.num_examples, sampling_arg, use_vllm=cfg.stabilizer_eval.use_vllm, selection_seed=task.selection_seed, hf_batch_size=cfg.stabilizer_eval.generations_eval.hf_batch_size, use_cot=task.use_cot, save_gens=task.save_gens, num_shots=task.num_shots, use_score_mode=cfg.stabilizer_eval.generations_eval.use_score_mode)
+            evaluator = MMLUEvaluator(subset, tokenizer, task.num_examples, sampling_arg, use_vllm=cfg.stabilizer_eval.use_vllm, selection_seed=task.selection_seed, use_cot=task.use_cot, save_gens=task.save_gens, num_shots=task.num_shots)
             evaluators.append(evaluator)
             aliases.append(evaluator.alias)
         elif task.alias == 'BoolQ' and task.do_task:
             from eval_utils import BoolQEvaluator
             sampling_arg = get_sampling_params(task.generation_kwargs, use_vllm=cfg.stabilizer_eval.use_vllm)
-            evaluator = BoolQEvaluator(tokenizer, task.num_examples, sampling_arg, use_vllm=cfg.stabilizer_eval.use_vllm, selection_seed=task.selection_seed, hf_batch_size=cfg.stabilizer_eval.generations_eval.hf_batch_size, save_gens=task.save_gens, num_shots=task.num_shots, use_score_mode=cfg.stabilizer_eval.generations_eval.use_score_mode)
+            evaluator = BoolQEvaluator(tokenizer, task.num_examples, sampling_arg, use_vllm=cfg.stabilizer_eval.use_vllm, selection_seed=task.selection_seed, save_gens=task.save_gens, num_shots=task.num_shots)
             evaluators.append(evaluator)
             aliases.append(evaluator.alias)
         else:
@@ -229,7 +229,7 @@ def do_model_eval(cfg, model, dataloaders, evaluators, aliases, tokenizer, outpu
         cfg: OmegaConf, the config
         model: transformers.PreTrainedModel, the model to evaluate
         dataloaders: dict str:torch.utils.data.Dataloader, dictionary of the dataloaders to evaluate on
-        evaluators: list, a list of evaluators to use for the tasks; each evaluator is a subclass of eval_generations_utils.BaseGenerationsEvaluator
+        evaluators: list, a list of evaluators to use for the tasks; each evaluator is a subclass of eval_utils.BaseGenerationsEvaluator
         aliases: list, a list of aliases for the evaluators; each alias is a string
         tokenizer: transformers.PreTrainedTokenizer, the tokenizer to use
         outputs_dir: str, path to save the results of generations if saving
@@ -456,7 +456,7 @@ def main(cfg):
         elif cfg.stabilizer.stabilizer == 'bema':
             if stabilizer.do_bema:
                 stabilizer_time_from_start = stabilizer.get_stabilizer_time(step)
-                mult_1, mult_2 = stabilizer.get_stabilizer_correction_weights(stabilizer_time_from_start, stabilizer.eta_power)
+                mult_1, mult_2 = stabilizer.get_bema_correction_weights(stabilizer_time_from_start, stabilizer.eta_power)
                 mult_2 = -mult_2
                 current_results['eval/stabilizer_time'] = stabilizer_time_from_start
                 current_results['eval/mult_1'] = mult_1
