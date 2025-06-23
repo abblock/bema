@@ -30,9 +30,7 @@ loss_eval:
 
 generations_eval:
     do_generations: True
-    hf_batch_size: null
     num_shots: 0
-    use_score_mode: False
     tasks:    
         - alias: MMLU-high_school_biology
           do_task: ${stabilizer_eval.do_task}

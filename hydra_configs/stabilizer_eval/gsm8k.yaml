@@ -17,10 +17,8 @@ loss_eval:
 generations_eval:
       do_generations: True
       save_gens: False
-      hf_batch_size: 8
       use_cot: False
       num_shots: 0
-      use_score_mode: False
       tasks:
         - alias: GSM8K
           do_task:  True 

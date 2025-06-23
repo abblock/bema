@@ -17,8 +17,6 @@ loss_eval:
 generations_eval:
       do_generations: False
       save_gens: True
-      hf_batch_size: 8
-      use_score_mode: False
       tasks:
         - alias: null
           do_task:  False
