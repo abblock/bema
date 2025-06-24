@@ -422,7 +422,7 @@ def main(cfg):
 
     previous_ckpt = - cfg.stabilizer.update_freq
 
-    print(f"Evaluating from ckpt 0 to ckpt {sorted_ckpt_paths[-1][1]}, every {cfg.stabilizer.update_freq} steps, i.e., {sorted_ckpt_paths[-1][1] // cfg.stabilizer.update_freq} checkpoints")
+
     for path, step in sorted_ckpt_paths:
         
 
