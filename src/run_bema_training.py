@@ -109,52 +109,57 @@ def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
 class BEMASFTTrainer(SFTTrainer):
     def __init__(self, cfg, *args, bema_cb=None, **kwargs):
         super().__init__(*args, **kwargs)
-        if bema_cb is None:
-            print("Warning: BEMASFTTrainer initialized without a BEMACallback instance. BEMA functionality will not be available.")
-        self.bema_cb = bema_cb
         self.cfg = cfg
 
+        # If user didn’t pass the callback explicitly, try to find it.
+        if bema_cb is None:
+            for cb in getattr(self.callback_handler, "callbacks", []):
+                # Import class name only; user might subclass BEMACallback.
+                if cb.__class__.__name__.lower().startswith("bema"):
+                    bema_cb = cb
+                    break
+        if bema_cb is None:
+            print("Warning: BEMASFTTrainer initialized without a BEMACallback instance. BEMA eval will be skipped.")
+        self.bema_cb = bema_cb
 
     def create_optimizer_and_scheduler(self, num_training_steps):
-        print("Overriding Scheduling")
+        # Respect config-customized linear schedule
         self.optimizer = self.create_optimizer()
-        self.lr_scheduler = get_linear_schedule_with_warmup(self.optimizer, self.cfg.training.warmup_steps, self.cfg.meta.num_steps, self.cfg.training.min_lr_multiplier)
+        self.lr_scheduler = get_linear_schedule_with_warmup(
+            self.optimizer,
+            self.cfg.training.warmup_steps,
+            self.cfg.meta.num_steps,
+            self.cfg.training.min_lr_multiplier,
+        )
 
+    def evaluate(self, *args, **kwargs):
+        bema_eval_cfg = self.cfg.stabilizer.eval
 
-    def evaluate(
-        self,
-        eval_dataset=None,
-        ignore_keys=None,
-        metric_key_prefix: str = "eval",
-    ):
-        # 1) Run the standard SFT evaluation
-        base_metrics = super().evaluate(eval_dataset, ignore_keys, metric_key_prefix)
-        if self.bema_cb is not None:
-            # 2) Grab the stabilized running_model from the callback
-            bema_model = self.bema_cb.running_model
-            if bema_model is None:
-                return base_metrics
+        # 1) Vanilla eval (live weights)
+        metrics_base = {}
+        if getattr(bema_eval_cfg, "eval_vanilla", True):
+            mb = super().evaluate(*args, **{**kwargs, "metric_key_prefix": "vanilla"})
+            # Prefix eval/vanilla/*
+            metrics_base = {f"eval/vanilla/{k}": v for k, v in mb.items()}
 
-            # 3) Move it onto the same device as the train/eval model
-            bema_model = bema_model.to(self.args.device)
-            orig_model = self.model
-            self.model = bema_model
+        # 2) BEMA eval (if callback present)
+        if self.bema_cb is None:
+            return metrics_base
 
-            # 4) Run evaluation again under a different prefix
-            bema_metrics = super().evaluate(
-                eval_dataset=eval_dataset,
-                ignore_keys=ignore_keys,
-                metric_key_prefix="bema",
-            )
+        if getattr(bema_eval_cfg, "eval_bema", True):
+            # Swap -> evaluate -> restore using the callback API
+            try:
+                self.bema_cb.swap_to_bema(self)
+                mbema = super().evaluate(*args, **{**kwargs, "metric_key_prefix": "bema"})
+            finally:
+                # Always restore live weights
+                self.bema_cb.swap_to_live(self)
 
-            # 5) Restore the original model
-            self.model = orig_model
+            metrics_bema = {f"eval/{k}": v for k, v in mbema.items()}
+        else:
+            metrics_bema = {}
 
-            # 6) Merge and return
-            base_metrics.update(bema_metrics)
-        return base_metrics
-
-
+        return {**metrics_base, **metrics_bema}
 
 
 def get_model(cfg):
@@ -166,8 +171,7 @@ def get_model(cfg):
         if cfg.training.fp16:
             raise ValueError('Cannot use both fp16 and bf16')
         kwargs['torch_dtype'] = torch.bfloat16
-    # if cfg.training.fp16:
-        # kwargs['torch_dtype'] = torch.float16
+
 
     kwargs['device_map'] = None
 
@@ -285,8 +289,11 @@ def main(cfg):
 
     if cfg.wandb.use and accelerator.is_main_process:
         import wandb
-        wandb.login(key=cfg.wandb.key,
-                    host=cfg.wandb.host)
+        wandb.login(
+                    key=cfg.wandb.key,
+                    relogin=True,
+                    host=cfg.wandb.host
+                    )
         cfg.wandb.key = None  # redact key
         wandb.init(project=cfg.wandb.project,
                    entity=cfg.wandb.entity,
@@ -304,7 +311,7 @@ def main(cfg):
         update_after=cfg.stabilizer.ema_update_after,
         scaling_lag=cfg.stabilizer.scaling_lag,
         ema_gamma=cfg.stabilizer.ema_gamma,
-        min_ema_multiplier=cfg.training.min_lr_multiplier,
+        min_ema_multiplier=cfg.stabilizer.min_ema_multiplier,
         device='cpu'
     )
 
