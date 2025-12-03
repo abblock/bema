@@ -1,14 +1,31 @@
-import torch
-from transformers import TrainerCallback, TrainerState, TrainingArguments, TrainerControl
+# # bema_callback_and_trainer.py
 import copy
+import torch
+from typing import Dict, List, Tuple, Optional
+from transformers import TrainerCallback, TrainerState, TrainingArguments, TrainerControl, Trainer
+
+
+
 
 def _unwrap_model(model):
+
     return model.module if hasattr(model, "module") else model
 
-
-
-
 class BEMACallback(TrainerCallback):
+    """
+    Bias-Corrected EMA (BEMA):
+        BEMA_t(θ) = EMA_t + α_t (θ_t - θ_0)
+        EMA_t     = β_t θ_t + (1 - β_t) EMA_{t-1}
+        β_t = (1 + γ t)^(-ema_power),  α_t = (1 + γ t)^(-eta_power)
+
+    Usage patterns:
+    - This callback updates internal EMA/BEMA buffers during training.
+    - To EVALUATE with BEMA weights, call `callback.swap_to_bema(trainer)` before eval,
+      then `callback.swap_to_live(trainer)` to restore training weights. (You can do it
+      around your own `trainer.evaluate()` or `trainer.predict()`.)
+    - On checkpoint save, this writes a `bema.pt` with BEMA weights.
+    """
+
     def __init__(
         self,
         update_freq: int = 100,
@@ -19,154 +36,189 @@ class BEMACallback(TrainerCallback):
         ema_gamma: float = 1.0,
         min_ema_multiplier: float = 0.0,
         device: str = "cpu",
+        update_on_cpu: bool = True,
     ):
-        """
-        Callback for HF SFTTrainer that implements BEMA (Bias Corrected Exponential Moving Average).  The returned model weights scale like 
-            θₜ' = αₜ·(θₜ - θ₀) + EMAₜ
-        where θₜ is the current model weights, θ₀ is a snapshot of the model weights at the first update_after step, EMAₜ is the exponential moving average of the model weights, and αₜ is a scaling factor that decays with the number of steps t as αₜ = (1 + γ·t)⁻ᵉᵗᵃ.
-        The EMA is computed as:
-            EMAₜ = βₜ·θₜ + (1 - βₜ)·EMAₜ₋₁
-        where βₜ is a decay factor that decays with the number of steps t as βₜ = (1 + γ·t)⁻ᵉᵐᵃ.
-        Args:
-            update_freq (int): How often to update the BEMA weights (in steps). (default = 100)
-            ema_power (float): Power for the EMA decay factor βₜ = (1 + γ·t)⁻ᵉᵐᵃ. (default = 0.5)
-            eta_power (float): Power for the BEMA scaling factor αₜ = (1 + γ·t)⁻ᵉᵗᵃ. (default = 0.2)
-            update_after (int): Number of steps to wait before starting to update the BEMA weights. (default = 0)
-            scaling_lag (int): Number of steps to lag the scaling factor αₜ. (default = 10)
-            ema_gamma (float): Initial value for the EMA decay factor. (default = 1.0)
-            min_ema_multiplier (float): Minimum value for the EMA decay factor. (default = 0.0)
-            device (str): Device to use for the BEMA buffers, e.g. "cpu" or "cuda".  Note that in most cases, this device SHOULD BE DIFFERENT from the device used for training in order to avoid OOM. (default = "cpu")
-        """        
-
-        
-        # user-provided hyperparams
-        self.update_freq = update_freq
-        self.ema_power = ema_power
-        self.eta_power = eta_power
-        self.update_after = update_after if update_after is not None else 0
-        self.scaling_lag = scaling_lag
-        self.ema_gamma = ema_gamma
-        self.min_ema_multiplier = min_ema_multiplier
+        self.update_freq = int(update_freq)
+        self.ema_power = float(ema_power)
+        self.eta_power = float(eta_power)
+        self.update_after = int(update_after) if update_after is not None else 0
+        self.scaling_lag = int(scaling_lag)
+        self.ema_gamma = float(ema_gamma)
+        self.min_ema_multiplier = float(min_ema_multiplier)
         self.device = device
+
+        self.do_bema = (self.update_freq > 0) and (self.eta_power > 0)
+        self.do_ema = (self.update_freq > 0) and (self.ema_power > 0)
+
+        self.update_on_cpu = update_on_cpu
+        self._saved_live_state = None  # for swapping
 
         # internal state
         self.initialized = False
-        self.param_names = []    # references to training model params
-        self.thetat_params = []  # references to training model params
-        self.theta0_params = []  # θ₀ buffers (on self.device)
-        self.ema_params = []      # EMA buffers (on self.device)
-        self.running_model = None # a copy of the model to run BEMA on
 
+        # Internal state
+        self.bema = {}  # bias-corrected EMA weights
+        self.ema = {}  # standard EMA weights
+        self.theta0 = {}  # initial weights
 
-    @torch.no_grad()
-    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        model = _unwrap_model(kwargs["model"])
+        # Bookkeeping for schedule
+        self._last_update_step: int = -1
 
-        self.running_model = copy.deepcopy(model).to(self.device)
-        # cache params once in a fixed order
-        for name, p in model.named_parameters():
+    # --------- Utilities ---------
+    def _global_step(self, state: TrainerState) -> int:
+        # HF global_step is >= 0; we use 1-based 't' for schedules (more natural).
+        t = int(state.global_step)
+        return max(0, t)
+
+    def _t_eff(self, t: int) -> int:
+        # Effective time index for schedule after a lag; keep at least 0
+        return max(0, t - self.scaling_lag)
+
+    def _beta_t(self, t: int) -> float:
+        if not self.do_ema:
+            return 0.0
+        te = self._t_eff(t)
+        beta = self.ema_gamma * (1.0 +  te) ** (-self.ema_power)
+        if self.min_ema_multiplier > 0.0:
+            beta = max(beta, self.min_ema_multiplier)
+        return float(beta)
+
+    def _alpha_t(self, t: int) -> float:
+        if not self.do_bema:
+            return 0.0
+        te = self._t_eff(t)
+        alpha = self.ema_gamma * (1.0 +  te) ** (-self.eta_power)
+        return float(alpha)
+
+    def _initialize_buffers(self, model):
+        base_model = _unwrap_model(model)
+        for name, p in base_model.named_parameters():
             if not p.requires_grad:
                 continue
-            self.param_names.append(name)
-            self.thetat_params.append(p)
-
-            # clone θ₀ and EMA on device
-            theta0_buf = p.data.detach().to(self.device).clone()
-            ema_buf = theta0_buf.clone()  # initialize EMA with θ₀
-            self.theta0_params.append(theta0_buf)
-            self.ema_params.append(ema_buf)
-
-           
-
-        self.initialized = False
-
-    def _ema_beta(self, t: int) -> float:
-        if self.ema_power < 0:
-            return 1.0 # no EMA, just BEMA
-        beta = (1 + self.ema_gamma * t) ** (-self.ema_power)
-        return max(beta, self.min_ema_multiplier)
-
-    def _bema_alpha(self, t: int) -> float:
-        if self.eta_power < 0:
-            return 0.0 # no BEMA, just EMA
-        return (1 + self.ema_gamma * t) ** (-self.eta_power)
-    
-    @staticmethod
-    def update_weight_(
-        first_tensor: torch.Tensor,
-        second_tensor: torch.Tensor,
-        alpha: float,
-        beta: float,
-    ):
-        """
-        Updates the first tensor in place using the second tensor and the given alpha and beta values, i.e., first_tensor = alpha * first_tesnor + beta * second_tensor.
-        """
-        first_tensor.mul_(alpha)  # first_tensor = alpha * first_tensor
-        first_tensor.add_(second_tensor, alpha=beta)  # first_tensor += beta * second_tensor
-        return first_tensor
+            self.bema[name] = p.detach().clone().float()
+            self.ema[name] = p.detach().clone().float()
+            self.theta0[name] = p.detach().clone().float()
+            if self.update_on_cpu:
+                self.bema[name] = self.bema[name].to('cpu')
+                self.ema[name] = self.ema[name].to('cpu')
+                self.theta0[name] = self.theta0[name].to('cpu')
+        self.initialized = True
 
     @torch.no_grad()
+    def _update_buffers(self, t: int, model):
+
+        base_model = _unwrap_model(model)
+        beta_t = self._beta_t(t)
+        alpha_t = self._alpha_t(t)
+
+        for name, p in base_model.named_parameters():
+            if not p.requires_grad:
+                continue
+            if self.update_on_cpu:
+                p_data = p.detach().to('cpu').float()
+            else:
+                p_data = p.detach().float()
+
+            if self.do_ema:
+                # Update EMA
+                self.ema[name].mul_(1 - beta_t).add_(p_data, alpha=beta_t)
+            else:
+                self.ema[name] = p_data.clone()
+
+            if self.do_bema:
+                # Update BEMA
+                bias_correction = p_data - self.theta0[name]
+                self.bema[name].copy_(self.ema[name] + alpha_t * bias_correction)
+            else:
+                self.bema[name].copy_(self.ema[name])
+
+
+
+    # --------- HF callback hooks ---------
+    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+
+        model = kwargs['model']
+        self._initialize_buffers(model)
+        return control
+
+
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        step = state.global_step
-        if step is None:
-            return
-        
+        model = kwargs['model']
 
-        # 1) When we first cross update_after, snapshot θ₀
-        if not self.initialized and step >= self.update_after:
-            for thetat_param, theta0_param, ema_param in zip(
-                self.thetat_params, self.theta0_params, self.ema_params
-            ):
-                model = _unwrap_model(kwargs["model"])
-                # copy θₜ to θ₀
-                theta0_param.copy_(thetat_param.data.detach().to(self.device))
-                # initialize EMA with θ₀
-                ema_param.copy_(theta0_param)
-            self.initialized = True
-
-        elif step >= self.update_after and step % self.update_freq == 0:
-            model = _unwrap_model(kwargs["model"])
-
-        # 2) skip until after update_after
+        t = self._global_step(state) 
+        if t < self.update_after: # skip updates until after this step
+            return control
+        if self.update_freq <= 0: # Disables updates
+            return control
+        if t == self._last_update_step:
+            return control
         if not self.initialized:
-            return
-
-        # 3) frequency check
-        if step % self.update_freq != 0:
-            return
+            self._initialize_buffers(model)
+            return control
 
 
-        # 4) compute shared t (with scaling lag)
-        t = max(step - self.update_after + self.scaling_lag, 1)
-        beta = self._ema_beta(t)
-        alhpa = self._bema_alpha(t)
+        if ((t - self._last_update_step) % self.update_freq) == 0:
+            self._update_buffers(t, model)
+            self._last_update_step = t
+        return control
 
-        # 5) gather the current θₜ from GPU → CPU once, non‐blocking
-        new_thetats = [p.data.detach().to(self.device, non_blocking=True) for p in self.thetat_params]
+    def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Save a `bema.pt` file alongside the checkpoint with the current BEMA weights.
+        """
 
-        # 6) EMA update:  ema ← β·θₜ + (1–β)·ema
-        torch._foreach_mul_(self.ema_params, 1 - beta)                      # ema = (1 -β) * ema
-        torch._foreach_add_(self.ema_params, new_thetats, alpha=beta)      # ema += β*θₜ
+        if not self.initialized:
+            return control
+
+        if not self.update_on_cpu:
+            bema = {name: p.detach().cpu().clone() for name, p in self.bema.items()}
+        else:
+            bema = {name: p.detach().clone() for name, p in self.bema.items()}
         
-        # 7) BEMA:  corr = (θₜ - θ₀)*α + ema
-        #    we do this in three foreach calls to avoid Python loops:
-        deltas = [t.clone() for t in new_thetats]                         # a) δ = θₜ.clone()
-        torch._foreach_sub_(deltas, self.theta0_params)                   # b) δ.sub_(θ₀)
-        torch._foreach_mul_(deltas, alhpa)                                 # c) δ.mul_(α)
-        torch._foreach_add_(deltas, self.ema_params)                       # d) δ.add_(ema)
-        
-        # 8) write back into a *single* flat state_dict and load
-        sd_run = self.running_model.state_dict()
-        for name, corr in zip(self.param_names, deltas):
-            sd_run[name].copy_(corr)
-        self.running_model.load_state_dict(sd_run, strict=False)
+        output_dir = args.output_dir
+        if output_dir:
+            path = f"{output_dir}/bema.pt"
+            torch.save(bema, path)
+        return control
 
+    
+
+
+# --------- Public helpers for swapping ---------
+    @torch.no_grad()
+    def swap_to_bema(self, trainer):
+        """
+        Copy current BEMA buffers into the trainer.model (in-place).
+        Call this before eval/inference to use BEMA weights.
+        """
+
+        # Save live state_dict once, to restore later
+        if self._saved_live_state is None:
+            self._saved_live_state = {
+                n: p.detach().cpu().clone()
+                for n, p in _unwrap_model(trainer.model).named_parameters()
+            }
+
+        else:
+            raise RuntimeError("swap_to_bema called but live state already saved. Did you forget to call swap_to_live()?")
+
+        # Copy BEMA into live model
+        for name, target in _unwrap_model(trainer.model).named_parameters():
+            if name in self.bema:
+                p_bema = self.bema[name]
+                target.copy_(p_bema.to(device=target.device, dtype=target.dtype))
 
 
     @torch.no_grad()
-    def on_train_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        if state.is_world_process_zero:
-            final_state_dict = self.running_model.state_dict()
-            path = f"{args.output_dir}/bema.pt"
-            torch.save(final_state_dict, path)
-            print(f"Saved BEMA to {path}")
+    def swap_to_live(self, trainer):
+        """
+        Restore the trainer.model parameters saved by `swap_to_bema`.
+        """
+        if self._saved_live_state is None:
+            return
+        
+        for name, target in _unwrap_model(trainer.model).named_parameters():
+            if name in self._saved_live_state:
+                tensor = self._saved_live_state[name]
+                target.copy_(tensor.to(device=target.device, dtype=target.dtype))
+        self._saved_live_state = None
